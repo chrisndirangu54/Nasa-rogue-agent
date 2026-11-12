@@ -124,3 +124,44 @@ exports.reviewEvidence=onCall(OPTIONS,async req=>{
  await ref.update({status:decision,reviewerUid:user(req),reviewedAt:FieldValue.serverTimestamp()});
  await log(user(req),"evidence_review",id,{decision});return {status:decision};
 });
+
+exports.listMyGroups=onCall(OPTIONS,async req=>{
+ const uid=user(req);
+ const snap=await db.collection("coordinationGroups").where("members","array-contains",uid).limit(30).get();
+ return {items:snap.docs.map(d=>({id:d.id,status:d.data().status,count:d.data().members.length,myResponse:d.data().approvals?.[uid]||"pending"}))};
+});
+exports.respondGroupInvitation=onCall(OPTIONS,async req=>{
+ const uid=user(req),id=str(req.data?.groupId,128),accept=req.data?.accept;
+ if(typeof accept!=="boolean"||!id)throw new HttpsError("invalid-argument","Invalid response");
+ const ref=db.doc("coordinationGroups/"+id);
+ await db.runTransaction(async tx=>{
+  const snap=await tx.get(ref);if(!snap.exists||!snap.data().members.includes(uid))forbidden();
+  const group=snap.data();if(group.status!=="pending_member_approval")throw new HttpsError("failed-precondition","Invitation closed");
+  const approvals={...(group.approvals||{}),[uid]:accept?"accepted":"declined"};
+  const status=Object.values(approvals).includes("declined")?"declined":group.members.every(member=>approvals[member]==="accepted")?"ready_for_moderated_coordination":"pending_member_approval";
+  tx.update(ref,{approvals,status,updatedAt:FieldValue.serverTimestamp()});
+ });
+ await log(uid,"group_invitation_response",id,{accept});return {recorded:true};
+});
+exports.listVerifiedProfessionals=onCall(OPTIONS,async req=>{
+ user(req);const s=await db.collection("verifiedProfessionals").where("status","==","verified").limit(40).get();
+ return {items:s.docs.map(d=>({uid:d.id,name:str(d.data().displayName,120),specialty:str(d.data().specialty,120)}))};
+});
+exports.staffMatchQueue=onCall(OPTIONS,async req=>{
+ user(req);if(!isStaff(req))forbidden();
+ const s=await db.collection("matchingConsents").where("enabled","==",true).limit(100).get();
+ return {items:s.docs.map(d=>({caseId:d.id,area:d.data().area||"",agentName:d.data().agentName||"",reviewStatus:d.data().reviewStatus||"pending"}))};
+});
+exports.staffEvidenceQueue=onCall(OPTIONS,async req=>{
+ user(req);if(!isStaff(req))forbidden();
+ const s=await db.collection("evidence").where("status","==","quarantined").limit(50).get();
+ return {items:s.docs.map(d=>({id:d.id,caseId:d.data().caseId,contentType:d.data().contentType,size:d.data().expectedSize,status:d.data().status}))};
+});
+exports.staffReviewReferral=onCall(OPTIONS,async req=>{
+ user(req);if(!isStaff(req))forbidden();
+ const id=str(req.data?.referralId,128),decision=req.data?.decision;
+ if(!["closed","needs_more_info"].includes(decision))throw new HttpsError("invalid-argument","Invalid status");
+ const ref=db.doc("referrals/"+id),snap=await ref.get();if(!snap.exists||snap.data().status!=="pending")throw new HttpsError("failed-precondition","Request unavailable");
+ await ref.update({status:decision,reviewerUid:user(req),updatedAt:FieldValue.serverTimestamp()});
+ await log(user(req),"referral_review",id,{decision});return {status:decision};
+});

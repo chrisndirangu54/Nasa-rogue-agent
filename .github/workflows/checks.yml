@@ -1,0 +1,27 @@
+name: TenantShield checks
+on:
+  pull_request:
+  push:
+    branches: [main, feat/tenantshield-mvp]
+jobs:
+  syntax-and-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check application JavaScript syntax
+        run: |
+          for file in app.js workspace.js operations.js professional.js firebase-config.js; do
+            node --check "$file"
+          done
+      - name: Install function dependencies
+        working-directory: functions
+        run: npm install --ignore-scripts --no-audit
+      - name: Check Cloud Functions syntax
+        working-directory: functions
+        run: npm run lint
+      - name: Ensure no confidential Firebase service key is committed
+        run: |
+          if git ls-files | grep -E '(serviceAccount.*\.json|firebase-adminsdk.*\.json)$'; then exit 1; fi

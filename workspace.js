@@ -1,4 +1,5 @@
 import { firebaseConfig } from "./firebase-config.js";
+import { mountOperations } from "./operations.js";
 let app,auth,db,sdk,storage,functions,user,caseId;
 const el=id=>document.getElementById(id);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -33,7 +34,7 @@ export async function openWorkspace(id){
   el("requestDeletion").addEventListener("click",async()=>{if(!confirm("Request account deletion? This does not immediately erase records subject to legal retention."))return;try{await call("requestPrivacyAction",{action:"delete"});setMessage("Your privacy request has been filed.")}catch(e){setMessage(e.message,true)}});
   el("evidenceUpload").addEventListener("click",()=>uploadEvidence(id));
   el("staffOpen").addEventListener("click",loadStaffQueue);
-  await Promise.all([loadEvidence(id),loadConsent(id)]);
+  await Promise.all([loadEvidence(id),loadConsent(id)]);await mountOperations({call,caseId:id,setMessage,el,esc});
  }catch(e){target.textContent="Could not open this case: "+e.message}
 }
 async function uploadEvidence(id){
