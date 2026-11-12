@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+ match /b/{bucket}/o {
+  match /quarantine/{uid}/{caseId}/{uploadId} {
+   allow create: if request.auth != null && request.auth.uid == uid
+    && request.resource.size > 0 && request.resource.size <= 10485760
+    && request.resource.contentType in ['application/pdf','image/png','image/jpeg']
+    && request.resource.metadata.uploadId == uploadId
+    && firestore.get(/databases/(default)/documents/evidence/$(uploadId)).data.ownerUid == uid
+    && firestore.get(/databases/(default)/documents/evidence/$(uploadId)).data.caseId == caseId
+    && firestore.get(/databases/(default)/documents/evidence/$(uploadId)).data.status == 'reserved'
+    && firestore.get(/databases/(default)/documents/evidence/$(uploadId)).data.path == request.resource.name
+    && firestore.get(/databases/(default)/documents/evidence/$(uploadId)).data.expectedSize == request.resource.size
+    && firestore.get(/databases/(default)/documents/evidence/$(uploadId)).data.contentType == request.resource.contentType;
+   allow read,update,delete: if false;
+  }
+  match /{allPaths=**}{allow read,write: if false;}
+ }
+}
