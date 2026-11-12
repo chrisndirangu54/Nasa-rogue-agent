@@ -305,3 +305,29 @@ exports.listCaseEvents=onCall(OPTIONS,async req=>{
  const docs=await db.collection("caseEvents").where("caseId","==",id).limit(100).get();
  return {items:docs.docs.map(d=>({id:d.id,kind:d.data().kind,content:d.data().content,at:d.data().at?.toDate()?.toISOString()||null}))};
 });
+
+exports.submitCase=onCall({...OPTIONS,enforceAppCheck:true},async req=>{
+ const uid=user(req);
+ if(process.env.TENANTSHIELD_INTAKE_ENABLED!=="true")throw new HttpsError("failed-precondition","Complaint intake is not yet enabled");
+ const data=req.data||{};
+ const allowed=["category","area","agent","description","amount","outcome"];
+ if(Object.keys(data).some(key=>!allowed.includes(key)))throw new HttpsError("invalid-argument","Unexpected fields");
+ const category=data.category,outcome=data.outcome,area=str(data.area,121),agent=str(data.agent,151),description=str(data.description,5001),amount=data.amount;
+ if(!["deposit","harassment","fees","eviction","other"].includes(category)||
+    !["refund","mediation","stop","advice","other"].includes(outcome)||
+    area.length<2||area.length>120||agent.length>150||description.length<30||description.length>5000||
+    !Number.isInteger(amount)||amount<0||amount>100000000)
+   throw new HttpsError("invalid-argument","Check the complaint fields");
+ const day=new Date().toISOString().slice(0,10);
+ const counter=db.doc("intakeCounters/"+crypto.createHash("sha256").update(uid+"|"+day).digest("hex"));
+ const ref=db.collection("cases").doc();
+ await db.runTransaction(async transaction=>{
+  const count=await transaction.get(counter);
+  const total=count.exists?count.data().count:0;
+  if(total>=3)throw new HttpsError("resource-exhausted","Daily submission limit reached");
+  transaction.set(counter,{ownerUid:uid,day,count:total+1,updatedAt:FieldValue.serverTimestamp()});
+  transaction.set(ref,{ownerUid:uid,category,outcome,area,agent,description,amount,status:"submitted",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
+ });
+ await log(uid,"case_created",ref.id,{category});
+ return {caseId:ref.id,status:"submitted"};
+});

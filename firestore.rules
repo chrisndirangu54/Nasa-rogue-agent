@@ -18,7 +18,7 @@ service cloud.firestore {
      && d.status=='submitted' && d.createdAt==request.time && d.updatedAt==request.time;
   }
   match /cases/{caseId}{
-   allow create: if signedIn() && validCase();
+   allow create: if false; // Cloud Function performs validation, quotas and intake gating
    allow get,list: if owner();
    allow update,delete: if false;
   }

@@ -7,3 +7,6 @@ test("privacy erasure requires second reviewer",()=>{assert.match(f,/reviewerUid
 test("withdrawn consent closes open matching invitations",()=>{assert.match(f,/cancelled_consent_withdrawn/);assert.match(f,/Distinct tenant accounts required/);});
 test("scanner clearance is needed for evidence approval",()=>{assert.match(f,/scanStatus!=="clean"/);});
 test("no scanner source files are hosted",()=>{assert.ok(JSON.parse(fs.readFileSync("firebase.json","utf8")).hosting.ignore.includes("scanner/**"));});
+
+test("direct client case creation is blocked",()=>{assert.match(rules,/allow create: if false/);});
+test("server submission requires App Check, intake gate and daily quota",()=>{assert.match(f,/exports\.submitCase=onCall\(\{\.\.\.OPTIONS,enforceAppCheck:true\}/);assert.match(f,/TENANTSHIELD_INTAKE_ENABLED/);assert.match(f,/total>=3/);});

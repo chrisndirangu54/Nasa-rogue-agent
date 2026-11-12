@@ -7,5 +7,7 @@ export const firebaseConfig = null;
 //   authDomain: "YOUR_PROJECT.firebaseapp.com",
 //   projectId: "YOUR_PROJECT",
 //   storageBucket: "YOUR_PROJECT.firebasestorage.app",
-//   appId: "YOUR_WEB_APP_ID"
+//   appId: "YOUR_WEB_APP_ID",
+//   appCheckSiteKey: "YOUR_RECAPTCHA_V3_SITE_KEY",
+//   functionsRegion: "us-central1"
 // };
