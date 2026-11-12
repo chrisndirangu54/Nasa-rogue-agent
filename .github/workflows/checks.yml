@@ -13,7 +13,7 @@ jobs:
           node-version: '22'
       - name: Check application JavaScript syntax
         run: |
-          for file in app.js workspace.js operations.js professional.js firebase-config.js; do
+          for file in app.js workspace.js operations.js professional.js apply.js firebase-config.js; do
             node --check "$file"
           done
       - name: Install function dependencies
@@ -25,3 +25,5 @@ jobs:
       - name: Ensure no confidential Firebase service key is committed
         run: |
           if git ls-files | grep -E '(serviceAccount.*\.json|firebase-adminsdk.*\.json)$'; then exit 1; fi
+      - name: Check scanner Python syntax
+        run: python -m py_compile scanner/main.py
