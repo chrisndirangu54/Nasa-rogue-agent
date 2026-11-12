@@ -35,7 +35,8 @@ export async function openWorkspace(id){
   el("requestDeletion").addEventListener("click",async()=>{if(!confirm("Request account deletion? This does not immediately erase records subject to legal retention."))return;try{await call("requestPrivacyAction",{action:"delete"});setMessage("Your privacy request has been filed.")}catch(e){setMessage(e.message,true)}});
   el("evidenceUpload").addEventListener("click",()=>uploadEvidence(id));
   el("staffOpen").addEventListener("click",loadStaffQueue);
-  await Promise.all([loadEvidence(id),loadConsent(id)]);await mountOperations({call,caseId:id,setMessage,el,esc});
+  el("addCaseNote").addEventListener("click",async()=>{try{await call("addCaseNote",{caseId:id,content:el("caseNote").value});el("caseNote").value="";await loadCaseTimeline(id);setMessage("Note saved.")}catch(e){setMessage(e.message,true)}});
+  await Promise.all([loadEvidence(id),loadConsent(id),loadCaseTimeline(id)]);await mountOperations({call,caseId:id,setMessage,el,esc});
  }catch(e){target.textContent="Could not open this case: "+e.message}
 }
 async function uploadEvidence(id){
@@ -63,4 +64,19 @@ async function loadStaffQueue(){
  for(const x of response.items){const wrap=document.createElement("div");wrap.className="workspace-alert";wrap.textContent=x.kind+" · "+x.status+" · "+x.id+" · "+(x.caseId||"");div.append(wrap)}
  if(!response.items.length)div.textContent="No outstanding referral requests."
  }catch(e){setMessage("Professional access unavailable: "+e.message,true)}
+}
+
+async function loadCaseTimeline(id){
+ const root=el("caseTimeline");root.replaceChildren();
+ try{
+  const {items}=await call("listCaseEvents",{caseId:id});
+  for(const item of items.sort((a,b)=>String(b.at).localeCompare(String(a.at)))){
+   const box=document.createElement("div");box.className="workspace-alert";
+   const head=document.createElement("strong");head.textContent=item.kind==="private_note"?"Private note":item.kind;
+   const body=document.createElement("p");body.textContent=item.content||"Activity recorded";
+   const date=document.createElement("small");date.textContent=item.at?new Date(item.at).toLocaleString("en-KE"):"Date pending";
+   box.append(head,date,body);root.append(box);
+  }
+  if(!items.length)root.textContent="No notes yet.";
+ }catch(e){root.textContent="Could not load your case journal."}
 }

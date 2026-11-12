@@ -19,7 +19,7 @@ service cloud.firestore {
   }
   match /cases/{caseId}{
    allow create: if signedIn() && validCase();
-   allow get,list: if owner() || staff();
+   allow get,list: if owner();
    allow update,delete: if false;
   }
   // All other collections are exclusively managed through audited Cloud Functions.

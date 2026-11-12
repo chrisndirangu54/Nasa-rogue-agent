@@ -41,3 +41,6 @@ Serve via `python -m http.server 8000` and open http://localhost:8000. Firebase 
 - Group member invitation/approval interface and safe private coordination messaging.
 - Moderation interface, appeals and respondent right-of-reply process.
 - Privacy notices, retention/deletion job execution, breach response and operational legal checks.
+
+## SoTA security and case-operations hardening
+A case journal and separate purpose-logged staff case-access function accompany stricter client Firestore access. Match withdrawal cancels active invitations, group proposals require distinct tenant accounts, and privacy deletion requires another staff actor to execute. These controls are not a substitute for integrated authorization tests, legal review or independent penetration testing.
