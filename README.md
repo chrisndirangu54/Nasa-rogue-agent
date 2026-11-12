@@ -41,3 +41,11 @@ Serve via `python -m http.server 8000` and open http://localhost:8000. Firebase 
 - Group member invitation/approval interface and safe private coordination messaging.
 - Moderation interface, appeals and respondent right-of-reply process.
 - Privacy notices, retention/deletion job execution, breach response and operational legal checks.
+
+## SoTA security and case-operations hardening
+A case journal and separate purpose-logged staff case-access function accompany stricter client Firestore access. Match withdrawal cancels active invitations, group proposals require distinct tenant accounts, and privacy deletion requires another staff actor to execute. These controls are not a substitute for integrated authorization tests, legal review or independent penetration testing.
+
+## Secure intake gate (SoTA branch)
+Complaint submission is routed through the App Check-enforced `submitCase` callable endpoint, with strict server validation and a maximum of three cases per user/day. Direct client Firestore creation is denied. Configure the Firebase web `appCheckSiteKey` and enable App Check on your project. The Cloud Functions environment variable `TENANTSHIELD_INTAKE_ENABLED=true` is REQUIRED to enable submissions; it is disabled by default.
+
+Before enabling the flag, ensure privacy notice, consent, moderation staffing, independent access-control tests, Firebase App Check enforcement, abuse monitoring and deletion workflows are validated. Do not enable live intake merely because the syntax tests pass.

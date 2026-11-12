@@ -20,6 +20,7 @@ exports.setMatchingConsent=onCall(OPTIONS,async req=>{
  if(typeof enabled!=="boolean")throw new HttpsError("invalid-argument","Consent must be boolean");
  const snap=await requiredCase(req,id);
  await db.doc("matchingConsents/"+id).set({caseId:id,ownerUid:user(req),enabled,agentName:snap.data().agent||"",area:snap.data().area||"",reviewStatus:"pending",updatedAt:FieldValue.serverTimestamp()});
+ if(!enabled){const groups=await db.collection("coordinationGroups").where("caseIds","array-contains",id).limit(100).get();for(const group of groups.docs){if(["pending_member_approval","ready_for_moderated_coordination"].includes(group.data().status))await group.ref.update({status:"cancelled_consent_withdrawn",updatedAt:FieldValue.serverTimestamp()});}}
  await log(user(req),"matching_consent",id,{enabled});return {enabled};
 });
 exports.getMatchingConsent=onCall(OPTIONS,async req=>{const id=str(req.data?.caseId,128);await requiredCase(req,id);const doc=await db.doc("matchingConsents/"+id).get();return {enabled:doc.exists&&doc.data().enabled===true}});
@@ -125,6 +126,8 @@ exports.createCoordinationGroup=onCall(OPTIONS,async req=>{
  if(cases.some((doc,i)=>!doc.exists||!consents[i].exists||!consents[i].data().enabled||consents[i].data().ownerUid!==doc.data().ownerUid))throw new HttpsError("failed-precondition","All parties must opt in");
  const distinctOwners=new Set(cases.map(d=>d.data().ownerUid));
  if(distinctOwners.size!==ids.length)throw new HttpsError("invalid-argument","A group must include distinct tenant accounts");
+ const owners=cases.map(d=>d.data().ownerUid);
+ if(new Set(owners).size!==owners.length)throw new HttpsError("invalid-argument","Distinct tenant accounts required");
  const ref=db.collection("coordinationGroups").doc();
  await ref.set({caseIds:ids,members:cases.map(d=>d.data().ownerUid),status:"pending_member_approval",createdBy:user(req),createdAt:FieldValue.serverTimestamp()});
  await log(user(req),"coordination_group_proposed",ref.id,{count:ids.length});
@@ -259,8 +262,9 @@ exports.staffExecuteDeletion=onCall({...OPTIONS,timeoutSeconds:300},async req=>{
  if(!snap.exists||snap.data().action!=="delete"||!["approved_for_execution","executing"].includes(snap.data().status))throw new HttpsError("failed-precondition","Deletion not approved");
  const uid=snap.data().ownerUid,hold=await db.doc("legalHolds/"+uid).get();
  if(hold.exists&&hold.data().active)throw new HttpsError("failed-precondition","Active legal hold");
- await ref.update({status:"executing",updatedAt:FieldValue.serverTimestamp()});
- const names=["cases","evidence","referrals","matchingConsents","professionalGrants","professionalApplications","verifiedProfessionals","respondentStatements"];
+ if(snap.data().reviewerUid===user(req))throw new HttpsError("permission-denied","Second staff reviewer required to execute deletion");
+ await ref.update({status:"executing",executingBy:user(req),updatedAt:FieldValue.serverTimestamp()});
+ const names=["cases","caseEvents","evidence","referrals","matchingConsents","professionalGrants","professionalApplications","verifiedProfessionals","respondentStatements"];
  for(const name of names){
   if(["professionalApplications","verifiedProfessionals"].includes(name)){await db.doc(name+"/"+uid).delete();continue}
   if(name==="respondentStatements")continue; // References to public third parties are reviewed separately.
@@ -279,4 +283,51 @@ exports.staffExecuteDeletion=onCall({...OPTIONS,timeoutSeconds:300},async req=>{
  await ref.update({status:"completed",completedAt:FieldValue.serverTimestamp()});
  await log(user(req),"privacy_deletion_completed",id,{redactedUid:crypto.createHash("sha256").update(uid).digest("hex").slice(0,16)});
  return {status:"completed"};
+});
+
+exports.staffReadCase=onCall(OPTIONS,async req=>{
+ staffOnly(req);const id=ident(req.data?.caseId),purpose=str(req.data?.purpose,240);
+ if(purpose.length<15)throw new HttpsError("invalid-argument","Document a legitimate case-access reason");
+ const snap=await db.doc("cases/"+id).get();
+ if(!snap.exists)throw new HttpsError("not-found","Case not found");
+ await log(user(req),"case_access",id,{purpose});
+ return {caseId:id,case:snap.data()};
+});
+exports.addCaseNote=onCall(OPTIONS,async req=>{
+ const id=ident(req.data?.caseId),content=str(req.data?.content,1500);await requiredCase(req,id);
+ if(content.length<5)throw new HttpsError("invalid-argument","Enter at least 5 characters");
+ const ref=await db.collection("caseEvents").add({caseId:id,ownerUid:user(req),kind:"private_note",content,at:FieldValue.serverTimestamp()});
+ await log(user(req),"case_note",id,{eventId:ref.id});
+ return {id:ref.id};
+});
+exports.listCaseEvents=onCall(OPTIONS,async req=>{
+ const id=ident(req.data?.caseId);await requiredCase(req,id);
+ const docs=await db.collection("caseEvents").where("caseId","==",id).limit(100).get();
+ return {items:docs.docs.map(d=>({id:d.id,kind:d.data().kind,content:d.data().content,at:d.data().at?.toDate()?.toISOString()||null}))};
+});
+
+exports.submitCase=onCall({...OPTIONS,enforceAppCheck:true},async req=>{
+ const uid=user(req);
+ if(process.env.TENANTSHIELD_INTAKE_ENABLED!=="true")throw new HttpsError("failed-precondition","Complaint intake is not yet enabled");
+ const data=req.data||{};
+ const allowed=["category","area","agent","description","amount","outcome"];
+ if(Object.keys(data).some(key=>!allowed.includes(key)))throw new HttpsError("invalid-argument","Unexpected fields");
+ const category=data.category,outcome=data.outcome,area=str(data.area,121),agent=str(data.agent,151),description=str(data.description,5001),amount=data.amount;
+ if(!["deposit","harassment","fees","eviction","other"].includes(category)||
+    !["refund","mediation","stop","advice","other"].includes(outcome)||
+    area.length<2||area.length>120||agent.length>150||description.length<30||description.length>5000||
+    !Number.isInteger(amount)||amount<0||amount>100000000)
+   throw new HttpsError("invalid-argument","Check the complaint fields");
+ const day=new Date().toISOString().slice(0,10);
+ const counter=db.doc("intakeCounters/"+crypto.createHash("sha256").update(uid+"|"+day).digest("hex"));
+ const ref=db.collection("cases").doc();
+ await db.runTransaction(async transaction=>{
+  const count=await transaction.get(counter);
+  const total=count.exists?count.data().count:0;
+  if(total>=3)throw new HttpsError("resource-exhausted","Daily submission limit reached");
+  transaction.set(counter,{ownerUid:uid,day,count:total+1,updatedAt:FieldValue.serverTimestamp()});
+  transaction.set(ref,{ownerUid:uid,category,outcome,area,agent,description,amount,status:"submitted",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
+ });
+ await log(uid,"case_created",ref.id,{category});
+ return {caseId:ref.id,status:"submitted"};
 });

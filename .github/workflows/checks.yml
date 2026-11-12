@@ -27,3 +27,6 @@ jobs:
           if git ls-files | grep -E '(serviceAccount.*\.json|firebase-adminsdk.*\.json)$'; then exit 1; fi
       - name: Check scanner Python syntax
         run: python -m py_compile scanner/main.py
+
+      - name: Security regression checks
+        run: node --test tests/security.test.cjs
