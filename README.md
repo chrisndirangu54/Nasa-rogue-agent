@@ -1,43 +1,43 @@
 # TenantShield Kenya
 
-A responsive, privacy-first MVP for documenting rental disputes and accessing potential resolution pathways in Kenya.
+Privacy-first tenant dispute platform built with static ES modules, Firebase Auth, Firestore, Storage and Cloud Functions.
 
-## Implemented
-- Responsive landing page, dispute types, how-it-works guidance and deposit-balance calculator.
-- Private complaint intake with structured fields, explicit consent and client-side validation.
-- Firebase Google sign-in and Firestore-backed *owner-only* case dashboard when configured.
-- Firestore rules restricting users to creating and reading their own complaints. No public case directory.
-- Storage rules deny all uploads until an audited evidence pipeline exists.
-- Safe text rendering, no unverified public allegations, no automated claims of wrongdoing.
+## Features
+- Mobile-responsive landing page, deposit planner, private complaint intake and owner-only case dashboard.
+- Per-case workspace for private evidence submissions, opt-in matching, legal/mediation referral requests, case export and privacy deletion requests.
+- Cloud Functions for consent, referral queue and advocate assignment, staff-reviewed group proposals, approved evidence retrieval and explicit professional access grants.
+- Cloud Storage uploads are **quarantined** and unreadable through the client SDK. Approval must follow **manual/external malware inspection**, not just a checkbox.
+- Staff and advocate access is tied to server-verified custom claims. Access grants and major actions are audit-logged.
+- No public allegations, automatically assembled lawsuits, unreviewed case matching or unsupervised legal advice.
 
-## Setup
-1. Create a Firebase project and register a web app.
-2. Enable **Authentication → Google** and configure authorized domains.
-3. Create a **Cloud Firestore** database.
-4. Copy the Firebase web configuration object into `firebase-config.js` (replace `null`). These are client identifiers, **not** service-account secrets.
-5. Install Firebase CLI if needed: `npm install -g firebase-tools`, then `firebase login` and `firebase use --add`.
-6. Deploy security rules **before admitting users**: `firebase deploy --only firestore:rules,storage`.
-7. Preview locally with `python -m http.server 8000` and open http://localhost:8000 . (Do not open the HTML directly as a `file://` URL.)
-8. Deploy hosting after reviewing the Firebase project association: `firebase deploy --only hosting`.
+## Deployment prerequisites
+1. Create Firebase project with Billing enabled (Cloud Functions and Storage services may require paid Blaze billing) and register web app.
+2. Enable Google sign-in and authorized domains; create Firestore and Cloud Storage.
+3. Add the web config in `firebase-config.js`. Set `functionsRegion` to your Functions deployment region (default `us-central1`). Do not commit service account keys.
+4. Install dependencies: `cd functions && npm install`.
+5. Install Firebase CLI, login and associate the right project: `firebase use --add`.
+6. Deploy **rules and functions before hosting**: `firebase deploy --only firestore:rules,storage,functions`.
+7. Test with Firebase Emulator Suite before processing real tenant data.
+8. Deploy hosting: `firebase deploy --only hosting`.
+9. Provision staff custom claims via a separate secure admin process (not public signup), and create a corresponding `verifiedProfessionals/{uid}` record with `status: "verified"` only after advocate verification. Never let the client set custom claims.
+10. Develop a real malware scanning workflow (e.g. isolated scanner service) and moderation SOP before approving evidence files.
 
-Until Firebase is configured, this site operates as a **non-persistent presentation preview**. No reports are saved.
+## Security notes
+- Storage rules allow tenant uploads only within their own uid-scoped quarantine namespace and limited file types/sizes; Firestore metadata reads go through authenticated Cloud Functions.
+- File MIME/size metadata is not proof of safe content. Until scanning and file-signature verification are deployed, **do not approve or open uploaded files**.
+- `reviewEvidence` takes a staff attestation of malware clearance; this is an administrative control, not a scanning engine.
+- Google sign-in, Authentication App Check, legal-review procedures and privacy documentation must be validated before production.
+- Staff roles have broad access to original complaints; implement least-privilege staff access and break-glass auditing before real rollout.
+- Group formation is only a proposal; sharing identities, messages, or evidence requires explicit, informed member consent and an additional approval process.
+- The case export is limited to the selected structured record. Full access/delete requests need administrator workflow and legally compliant retention/holds.
+- No court electronic filing, lawyer licensing validation API, payment processing or AI legal advice is integrated. A qualified Kenyan lawyer must review the legal journeys and public copy.
 
-## Security and production blockers
-- Do not publish real complaints or invite real users until a Kenyan legal/privacy review, privacy policy, retention schedule, breach response and lawful basis assessment are complete.
-- Evidence uploads are **not implemented**; do not put personal evidence into the source repository.
-- Case matching and collective litigation groups are **not implemented**. They require consent-based coordination, careful identity verification, respondent fairness procedures and trained moderation.
-- Legal advice, professional referrals and court integrations are **not implemented**.
-- Firestore `list` rules are owner-restricted; queries must filter `ownerUid` by the signed-in user.
-- This application is **not a law firm**, not an emergency reporting service and does not determine that an agent committed misconduct.
-- For production, move high-risk workflow operations to a trusted server, add App Check, audit logs, retention/deletion processes, user export and verified support contacts.
-- Project identifiers in `firebase-config.js` are expected to be public, but backend secrets, API keys with privileged permissions and service credentials must never be committed.
+## Running locally
+Serve via `python -m http.server 8000` and open http://localhost:8000. Firebase is inert until configured. Use the Firebase emulators for backend testing.
 
-## Development
-Static ES modules (no bundler required). Main files: `index.html`, `styles.css`, `app.js`, `firebase-config.js`. Firebase JS SDK is dynamically imported from Google's CDN after project configuration.
-
-## Roadmap
-1. Tenant evidence upload service with scanning and restricted access.
-2. Moderator console with audited case access and right-of-reply workflow.
-3. Tenant opt-in matching using reviewed agent/entity identifiers.
-4. Legal-referral directory, mediation workflows and consent management.
-5. Policy-compliant notifications, case export and GDPR/Kenya DPA privacy tooling.
+## Pending production work
+- Antivirus content scanning and signature validation, evidence integrity hashes and review UI.
+- Verified advocate onboarding interface and explicit consent-based case access UI.
+- Group member invitation/approval interface and safe private coordination messaging.
+- Moderation interface, appeals and respondent right-of-reply process.
+- Privacy notices, retention/deletion job execution, breach response and operational legal checks.

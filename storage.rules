@@ -1,8 +1,14 @@
 rules_version = '2';
 service firebase.storage {
-  match /b/{bucket}/o {
-    // Evidence uploading is deliberately disabled until a reviewed upload service,
-    // malware scanning, size limits, content validation and access audit are deployed.
-    match /{allPaths=**} { allow read, write: if false; }
+ match /b/{bucket}/o {
+  match /quarantine/{uid}/{caseId}/{uploadId} {
+   allow create: if request.auth != null && request.auth.uid == uid
+    && request.resource.size > 0 && request.resource.size <= 10 * 1024 * 1024
+    && request.resource.contentType in ['application/pdf','image/png','image/jpeg']
+    && request.resource.metadata.uploadId == uploadId;
+   // Quarantined files are never readable via direct client access.
+   allow read,update,delete: if false;
   }
+  match /{allPaths=**} {allow read,write: if false;}
+ }
 }
